@@ -1,0 +1,13 @@
+# Config real de uma instalação — tem o device_token, nunca commitar.
+config.json
+
+# Log do agente rodando
+agent.log*
+
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/

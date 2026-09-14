@@ -1,0 +1,18 @@
+[project]
+name = "horun-agent"
+version = "0.1.0"
+description = "Agente local instalado no PC de um equipamento do laboratório NQTR — dá ao Horun acesso aos arquivos locais sem abrir porta de entrada no equipamento."
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agent*"]

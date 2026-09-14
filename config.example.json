@@ -1,0 +1,12 @@
+{
+  "server_url": "https://192.168.31.171/m/re7s",
+  "device_name": "PC-ROCKEVAL-65",
+  "enroll_code": "",
+  "device_token": "",
+  "poll_interval_seconds": 3,
+  "roots": {
+    "data": "C:\\VT RE7S\\data\\system",
+    "jobs": "C:\\Users\\RE7S 65\\Documents\\RE7raw-data",
+    "mtl_results": "D:\\Results"
+  }
+}
