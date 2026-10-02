@@ -38,7 +38,7 @@ enrolar de novo, a menos que o admin revogue a instalação.
   "tasks": [
     {
       "id": "task-123",
-      "op": "read_file",           // "read_file" | "write_file" | "list_files" | "move_files"
+      "op": "read_file",           // "read_file" | "write_file" | "list_files" | "list_tree" | "move_files"
       "root": "data",              // chave dentro de `roots` no config.json do agente
       "path": "TABSAMPLE.txt",     // caminho relativo ao root, sempre posix (/, nunca \)
       "content_base64": null,      // write_file: conteúdo a gravar; move_files: JSON dos movimentos
@@ -75,10 +75,22 @@ consultas — não é erro, só quer dizer "nada pendente agora".
 { "ok": true }
 ```
 
+**Request (sucesso, árvore — `list_tree`)**
+```json
+{ "ok": true, "entries": [ { "path": "2026/Notas", "is_dir": true, "size": null },
+                           { "path": "2026/Notas/nf1.pdf", "is_dir": false, "size": 48213 } ] }
+```
+
 **Request (falha)**
 ```json
-{ "ok": false, "error": "arquivo não encontrado: TABSAMPLE.txt" }
+{ "ok": false, "error": "arquivo não encontrado: TABSAMPLE.txt", "code": "not_found" }
 ```
+
+`code` (desde 0.4.0; agentes antigos só mandam `error`): `not_found`,
+`outside_root`, `unknown_root`, `read_only` (pasta sem permissão para a
+operação), `too_large`, `unknown_op`. O servidor deve decidir pelo `code`
+quando houver, e pelo texto só para agentes antigos (`file_not_found` do
+pacote do servidor faz os dois).
 
 ## `move_files` — renomear/mover um grupo de arquivos (desde 0.2.0)
 
@@ -123,6 +135,23 @@ O resultado traz o pedaço em `content_base64` e o tamanho TOTAL em `size`
 agentes >= 0.3.0 — para os antigos, o servidor recusa a operação antes de
 enfileirar, com a mensagem "atualize o agente".
 
+## `list_tree` — pastas e arquivos com tamanho (desde 0.4.0)
+
+Para quem precisa navegar uma pasta inteira (ex. o drive do Financeiro):
+`path` = pasta de partida (`""` = o próprio root), `args.recursive`
+(padrão `true`). Pastas vazias aparecem — `list_files` só vê arquivos.
+Caminhos sempre relativos ao ROOT (não à pasta pedida), em posix,
+ordenados; a pasta pedida não entra. Mais de 50.000 itens → `too_large`
+(peça uma subpasta).
+
+## Limite de leitura e caminhos longos (desde 0.4.0)
+
+- `max_read_bytes` (raiz do `config.json`, padrão 8 MiB): uma leitura que
+  devolveria mais que isso volta `too_large` — o servidor lê em pedaços
+  (`read_bytes(..., chunk_size=...)`, o pacote usa 4 MiB).
+- Caminhos acima de 260 caracteres no Windows funcionam (o agente usa o
+  prefixo `\\?\` internamente); os caminhos devolvidos nunca o levam.
+
 ## Compatibilidade
 
 - Para agentes 0.1/0.2, cada tarefa tem **exatamente** os 6 campos
@@ -130,6 +159,8 @@ enfileirar, com a mensagem "atualize o agente".
   mais ou a menos). Campos novos só vão para quem se identificou >= 0.3.0.
 - Desde 0.2.0 o agente ignora campos desconhecidos e nenhuma falha na
   consulta encerra o serviço.
+- `list_tree` é recusado pelo servidor antes de enfileirar se o agente
+  conectado for < 0.4.0 ("atualize o agente").
 - Código de enrolamento: 10 caracteres, uso único (consumido de forma
   atômica), vale 60 minutos — expirado responde `410`.
 
@@ -137,8 +168,9 @@ enfileirar, com a mensagem "atualize o agente".
 
 Cada `root` pode ter `mode`: `read` (ler/listar), `read-move` (+ mover/
 renomear, nunca alterar conteúdo) ou `read-write` (tudo — o padrão, e o que
-vale para pastas escritas só como texto). Tarefa fora da permissão volta
-`{"ok": false, "error": "sem permissão para ... em 'x' ..."}`.
+vale para pastas escritas só como texto). `"read_only": true` é sinônimo
+de `"mode": "read"`. Tarefa fora da permissão volta
+`{"ok": false, "error": "sem permissão para ... em 'x' ...", "code": "read_only"}`.
 
 ## Vários módulos no mesmo PC (desde 0.3.0)
 

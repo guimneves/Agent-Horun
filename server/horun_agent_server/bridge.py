@@ -32,7 +32,12 @@ from .settings import settings
 class AgentTaskError(RuntimeError):
     """O agente respondeu, mas com falha (arquivo não encontrado, sem
     permissão na pasta, root desconhecido...) — mensagem pronta para virar
-    um erro 502/409 na rota que chamou."""
+    um erro 502/409 na rota que chamou. `code` (agente >= 0.4.0):
+    not_found, outside_root, unknown_root, read_only, too_large, unknown_op."""
+
+    def __init__(self, message: str, code: str | None = None):
+        super().__init__(message)
+        self.code = code
 
 
 class AgentTimeoutError(AgentTaskError):
@@ -54,6 +59,7 @@ class AgentTooOldError(AgentTaskError):
 FEATURE_MIN_VERSION = {
     "move_files": "0.2.0",
     "read_range": "0.3.0",
+    "list_tree": "0.4.0",
 }
 _UNKNOWN_VERSION = "0.2.0"
 
@@ -77,6 +83,11 @@ class _TaskSnapshot:
     result_paths: str | None
     result_error: str | None
     result_size: int | None = None
+    result_code: str | None = None
+
+
+def _failed(snap: _TaskSnapshot, fallback: str) -> AgentTaskError:
+    return AgentTaskError(snap.result_error or fallback, code=snap.result_code)
 
 
 def _online_devices(bind) -> list[AgentDevice]:
@@ -136,6 +147,7 @@ def _poll_once(bind, task_id: int) -> _TaskSnapshot | None:
             result_paths=task.result_paths,
             result_error=task.result_error,
             result_size=task.result_size,
+            result_code=task.result_code,
         )
 
 
@@ -193,7 +205,7 @@ def read_bytes(
         _require_online(bind)
         snap = _run(session, timeout, op="read_file", root=root, path=path)
         if not snap.result_ok:
-            raise AgentTaskError(snap.result_error or f"falha ao ler {path!r} via agente")
+            raise _failed(snap, f"falha ao ler {path!r} via agente")
         return base64.b64decode(snap.result_content_base64 or "")
 
     _require_version(bind, "read_range")
@@ -204,7 +216,7 @@ def read_bytes(
             session, timeout, op="read_file", root=root, path=path, args={"offset": offset, "length": chunk_size}
         )
         if not snap.result_ok:
-            raise AgentTaskError(snap.result_error or f"falha ao ler {path!r} via agente")
+            raise _failed(snap, f"falha ao ler {path!r} via agente")
         piece = base64.b64decode(snap.result_content_base64 or "")
         parts.append(piece)
         offset += len(piece)
@@ -225,7 +237,7 @@ def write_bytes(session: Session, root: str, path: str, content: bytes, *, timeo
     encoded = base64.b64encode(content).decode("ascii")
     snap = _run(session, timeout, op="write_file", root=root, path=path, content_base64=encoded)
     if not snap.result_ok:
-        raise AgentTaskError(snap.result_error or f"falha ao escrever {path!r} via agente")
+        raise _failed(snap, f"falha ao escrever {path!r} via agente")
 
 
 def write_text(session: Session, root: str, path: str, content: str, *, timeout: float | None = None) -> None:
@@ -237,7 +249,20 @@ def list_files(session: Session, root: str, glob: str, *, timeout: float | None 
     _require_online(session.get_bind())
     snap = _run(session, timeout, op="list_files", root=root, glob=glob)
     if not snap.result_ok:
-        raise AgentTaskError(snap.result_error or f"falha ao listar {glob!r} via agente")
+        raise _failed(snap, f"falha ao listar {glob!r} via agente")
+    return json.loads(snap.result_paths or "[]")
+
+
+def list_tree(
+    session: Session, root: str, path: str = "", *, recursive: bool = True, timeout: float | None = None
+) -> list[dict]:
+    """Pastas e arquivos a partir de `path` (agente >= 0.4.0): lista de
+    `{"path", "is_dir", "size"}`, caminhos relativos ao ROOT, em posix.
+    Pastas vazias aparecem (list_files só vê arquivos)."""
+    _require_version(session.get_bind(), "list_tree")
+    snap = _run(session, timeout, op="list_tree", root=root, path=path, args={"recursive": recursive})
+    if not snap.result_ok:
+        raise _failed(snap, f"falha ao listar a pasta {path!r} via agente")
     return json.loads(snap.result_paths or "[]")
 
 
@@ -253,11 +278,12 @@ def move_files(session: Session, root: str, moves: list[dict], *, timeout: float
         error = snap.result_error or "falha ao mover os arquivos via agente"
         if "operação desconhecida" in error:
             error = "o Agente Horun instalado no equipamento é antigo — atualize para a versão 0.2.0 ou mais nova"
-        raise AgentTaskError(error)
+        raise AgentTaskError(error, code=snap.result_code)
     return json.loads(snap.result_paths or "[]")
 
 
 def file_not_found(exc: AgentTaskError) -> bool:
     """Distingue "arquivo não existe" (equivalente a `Path.exists() is
-    False`) de qualquer outro erro — mesmo texto que o agente usa."""
-    return "não encontrado" in str(exc)
+    False`) de qualquer outro erro — pelo `code` (agente >= 0.4.0) ou pelo
+    texto que os agentes antigos usam."""
+    return exc.code == "not_found" or "não encontrado" in str(exc)

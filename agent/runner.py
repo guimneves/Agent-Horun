@@ -13,7 +13,7 @@ import time
 
 from agent.client import ClientError, HorunAgentClient, Task
 from agent.config import AgentConfig, ServerConfig
-from agent.tasks import TaskError, list_files, move_files, read_file, write_file
+from agent.tasks import TaskError, list_files, list_tree, move_files, read_file, write_file
 
 logger = logging.getLogger("horun_agent")
 
@@ -51,7 +51,7 @@ def _decode_moves(task: Task) -> list:
 def execute_task(server: ServerConfig, task: Task) -> dict:
     """Devolve exatamente o corpo que vai em `POST .../result` (ver
     PROTOCOL.md) — nunca deixa uma exceção subir, sempre vira
-    `{"ok": false, "error": ...}` se a tarefa falhar."""
+    `{"ok": false, "error": ..., "code": ...}` se a tarefa falhar."""
     args = task.args or {}
     try:
         if task.op == "read_file":
@@ -67,12 +67,21 @@ def execute_task(server: ServerConfig, task: Task) -> dict:
         if task.op == "list_files":
             result = list_files(server, task.root, task.glob or "*")
             return {"ok": True, "paths": result.paths}
+        if task.op == "list_tree":
+            entries = list_tree(server, task.root, task.path or "", recursive=bool(args.get("recursive", True)))
+            return {
+                "ok": True,
+                "entries": [{"path": e.path, "is_dir": e.is_dir, "size": e.size} for e in entries],
+            }
         if task.op == "move_files":
             result = move_files(server, task.root, _decode_moves(task))
             return {"ok": True, "paths": result.paths}
-        return {"ok": False, "error": f"operação desconhecida: {task.op!r}"}
+        return {"ok": False, "error": f"operação desconhecida: {task.op!r}", "code": "unknown_op"}
     except TaskError as exc:
-        return {"ok": False, "error": str(exc)}
+        result = {"ok": False, "error": str(exc)}
+        if exc.code:
+            result["code"] = exc.code
+        return result
     except Exception as exc:  # nunca deixa uma tarefa individual matar o loop
         logger.exception("erro inesperado executando tarefa %s", task.id)
         return {"ok": False, "error": f"erro inesperado: {exc}"}

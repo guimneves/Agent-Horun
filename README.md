@@ -86,7 +86,8 @@ módulos atendidos (`servers`) e a permissão de cada pasta — ver
 
 O mesmo pacote para todo módulo, em `server/horun_agent_server/`: tabelas,
 rotas `/agent/*` e a ponte (`read_text`, `read_bytes` em pedaços,
-`write_text`, `list_files`, `move_files`). Vai para dentro de cada módulo por
+`write_text`, `list_files`, `list_tree`, `move_files`; erros com `.code`).
+Vai para dentro de cada módulo por
 cópia versionada:
 
 ```bash
@@ -119,7 +120,9 @@ depender de terminal aberto nem de login do Windows.
 
 ## Status
 
-Versão 0.3.0. Em produção no RE7S (PC do Rock-Eval): leitura/escrita do
+Versão 0.4.0 (0.4.0: `list_tree`, códigos de erro, `max_read_bytes`,
+`read_only: true`, caminhos longos do Windows — o que faltava para o drive
+do Financeiro). Em produção no RE7S (PC do Rock-Eval): leitura/escrita do
 TABSAMPLE, filas, savecycle, standard.ini, .B00 do PostRun, pesagem e
 renomeação de análises. O lado servidor é o pacote `server/`, usado pelo
 RE7S e preparado para o Financeiro (drive).

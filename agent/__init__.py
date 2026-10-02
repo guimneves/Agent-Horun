@@ -2,4 +2,4 @@
 
 # Enviada ao servidor em toda chamada (cabeçalho X-Horun-Agent-Version): é
 # assim que o servidor sabe quais operações/campos este agente entende.
-__version__ = "0.3.0"
+__version__ = "0.4.0"

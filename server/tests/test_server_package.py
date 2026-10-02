@@ -198,7 +198,33 @@ def test_missing_file_is_recognizable(client, engine, server_cfg):
     headers = _enroll(client)
     with Session(engine) as s, pytest.raises(bridge.AgentTaskError) as info:
         _run_with_agent(client, headers, server_cfg, lambda: bridge.read_text(s, "data", "nao.txt", timeout=5))
-    assert bridge.file_not_found(info.value)
+    assert bridge.file_not_found(info.value) and info.value.code == "not_found"
+
+
+def test_error_code_reaches_the_caller(client, engine, server_cfg):
+    headers = _enroll(client)
+    with Session(engine) as s, pytest.raises(bridge.AgentTaskError) as info:
+        _run_with_agent(client, headers, server_cfg, lambda: bridge.write_text(s, "drive", "z.txt", "x", timeout=5))
+    assert info.value.code == "read_only"
+
+
+def test_list_tree_round_trip(client, engine, server_cfg):
+    headers = _enroll(client)
+    drive = server_cfg.root("drive")
+    (drive / "2026" / "Vazia").mkdir(parents=True)
+    (drive / "2026" / "nf.pdf").write_bytes(b"abc")
+    with Session(engine) as s:
+        tree = _run_with_agent(client, headers, server_cfg, lambda: bridge.list_tree(s, "drive", "2026", timeout=5))
+    assert tree == [
+        {"path": "2026/Vazia", "is_dir": True, "size": None},
+        {"path": "2026/nf.pdf", "is_dir": False, "size": 3},
+    ]
+
+
+def test_list_tree_refused_for_an_agent_before_0_4(client, engine):
+    _enroll(client, version="0.3.0")
+    with Session(engine) as s, pytest.raises(bridge.AgentTooOldError, match="0.4.0"):
+        bridge.list_tree(s, "drive", "", timeout=1)
 
 
 # ---------------------------------------------------------------- prazos

@@ -79,9 +79,10 @@ class AgentTask(SQLModel, table=True):
     status: str = Field(default="pending", index=True)
     result_ok: Optional[bool] = None
     result_content_base64: Optional[str] = None
-    result_paths: Optional[str] = None  # JSON list[str]
+    result_paths: Optional[str] = None  # JSON list[str]; em list_tree, JSON list[{path, is_dir, size}]
     result_size: Optional[int] = None  # read_file: tamanho total do arquivo
     result_error: Optional[str] = None
+    result_code: Optional[str] = None  # not_found, outside_root, unknown_root, read_only, too_large...
     created_at: datetime = Field(default_factory=utcnow, index=True)
     completed_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
@@ -96,4 +97,5 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("agenttask", "expires_at", "DATETIME"),
     ("agenttask", "args_json", "VARCHAR"),
     ("agenttask", "result_size", "INTEGER"),
+    ("agenttask", "result_code", "VARCHAR"),
 ]

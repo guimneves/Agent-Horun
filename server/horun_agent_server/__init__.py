@@ -19,4 +19,4 @@ NÃO EDITE a cópia dentro de um módulo: mude aqui (repositório Agent-Horun)
 e rode `scripts/vendor_server.py` de novo.
 """
 
-PACKAGE_VERSION = "0.3.0"
+PACKAGE_VERSION = "0.4.0"

@@ -23,6 +23,11 @@ Em qualquer formato, cada pasta pode ser só o caminho (texto) ou
 - `read-move`: ler, listar e renomear/mover — nunca alterar conteúdo (ex.
   RE7raw-data do Rock-Eval);
 - `read-write`: tudo (ex. a pasta do TABSAMPLE.txt).
+
+`{"path": ..., "read_only": true}` é sinônimo de `"mode": "read"` (formato
+do contrato original do Financeiro). `max_read_bytes` (raiz do arquivo,
+padrão 8 MiB) limita quanto o agente devolve numa única leitura — o servidor
+lê arquivos maiores em pedaços.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from pathlib import Path
 DEFAULT_CONFIG_PATH = Path(os.environ.get("HORUN_AGENT_CONFIG", "config.json"))
 
 MODES = ("read", "read-move", "read-write")
+DEFAULT_MAX_READ_BYTES = 8 * 1024 * 1024
 
 
 class ConfigError(ValueError):
@@ -55,6 +61,7 @@ class ServerConfig:
     roots: dict[str, RootConfig] = field(default_factory=dict)
     device_token: str = ""
     enroll_code: str = ""
+    max_read_bytes: int = DEFAULT_MAX_READ_BYTES
 
     @property
     def enrolled(self) -> bool:
@@ -83,6 +90,7 @@ class AgentConfig:
     # lido no formato antigo (um servidor só)? `save()` regrava no mesmo
     # formato, para não surpreender quem edita o arquivo à mão
     single_server_format: bool = False
+    max_read_bytes: int = DEFAULT_MAX_READ_BYTES
 
     def save(self) -> None:
         """Persiste o `device_token` recém-obtido no enrolamento, pra não
@@ -105,6 +113,8 @@ class AgentConfig:
                 "poll_interval_seconds": self.poll_interval_seconds,
                 "roots": roots_out(s),
             }
+            if self.max_read_bytes != DEFAULT_MAX_READ_BYTES:
+                data["max_read_bytes"] = self.max_read_bytes
         else:
             data = {
                 "device_name": self.device_name,
@@ -119,6 +129,8 @@ class AgentConfig:
                     for s in self.servers
                 ],
             }
+            if self.max_read_bytes != DEFAULT_MAX_READ_BYTES:
+                data["max_read_bytes"] = self.max_read_bytes
         self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
@@ -132,7 +144,9 @@ def _parse_roots(raw: object, where: str) -> dict[str, RootConfig]:
             continue
         if not isinstance(value, dict) or not value.get("path"):
             raise ConfigError(f"{where}: pasta {name!r} precisa de 'path'")
-        mode = value.get("mode", "read-write")
+        mode = value.get("mode") or ("read" if value.get("read_only") else "read-write")
+        if value.get("read_only") and mode != "read":
+            raise ConfigError(f"{where}: pasta {name!r} com read_only=true e mode {mode!r} — use só um dos dois")
         if mode not in MODES:
             raise ConfigError(f"{where}: pasta {name!r} com mode inválido {mode!r} (use {', '.join(MODES)})")
         roots[name] = RootConfig(path=Path(value["path"]).resolve(), mode=mode)
@@ -175,10 +189,20 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> AgentConfig:
         servers = [_parse_server(data, str(path), "server_url")]
         single = True
 
+    try:
+        max_read = int(data.get("max_read_bytes", DEFAULT_MAX_READ_BYTES))
+    except (TypeError, ValueError):
+        raise ConfigError(f"{path}: 'max_read_bytes' precisa ser um número inteiro") from None
+    if max_read <= 0:
+        raise ConfigError(f"{path}: 'max_read_bytes' precisa ser positivo")
+    for server in servers:
+        server.max_read_bytes = max_read
+
     return AgentConfig(
         path=path,
         device_name=data.get("device_name", ""),
         poll_interval_seconds=float(data.get("poll_interval_seconds", 3)),
         servers=servers,
         single_server_format=single,
+        max_read_bytes=max_read,
     )

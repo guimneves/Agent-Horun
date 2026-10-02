@@ -86,7 +86,9 @@ class TaskResultIn(BaseModel):
     content_base64: Optional[str] = None
     paths: Optional[list[str]] = None
     size: Optional[int] = None
+    entries: Optional[list[dict]] = None  # list_tree
     error: Optional[str] = None
+    code: Optional[str] = None
 
 
 _last_cleanup = 0.0
@@ -267,6 +269,7 @@ def build_router(
             # Guarda o resultado só para diagnóstico; continua "expired".
             task.result_ok = payload.ok
             task.result_error = payload.error
+            task.result_code = payload.code
             session.add(task)
             session.commit()
             return {"ok": True}
@@ -275,9 +278,11 @@ def build_router(
 
         task.result_ok = payload.ok
         task.result_content_base64 = payload.content_base64
-        task.result_paths = json.dumps(payload.paths) if payload.paths is not None else None
+        listed = payload.entries if payload.entries is not None else payload.paths
+        task.result_paths = json.dumps(listed) if listed is not None else None
         task.result_size = payload.size
         task.result_error = payload.error
+        task.result_code = payload.code
         task.status = "done" if payload.ok else "error"
         task.completed_at = datetime.now(timezone.utc)
         session.add(task)
