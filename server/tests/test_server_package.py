@@ -171,6 +171,19 @@ def test_read_in_chunks_reassembles_a_big_file(client, engine, server_cfg):
         assert len(s.exec(select(models.AgentTask)).all()) == 10  # um pedaço por tarefa
 
 
+def test_max_bytes_refuses_a_big_file_on_the_first_chunk(client, engine, server_cfg):
+    headers = _enroll(client)
+    (server_cfg.root("drive") / "grande.pdf").write_bytes(b"x" * 5000)
+    with Session(engine) as s:
+        with pytest.raises(bridge.AgentTaskError) as info:
+            _run_with_agent(client, headers, server_cfg, lambda: bridge.read_bytes(
+                s, "drive", "grande.pdf", timeout=5, chunk_size=1000, max_bytes=4000,
+            ))
+        assert info.value.code == "too_large"
+        assert len(s.exec(select(models.AgentTask)).all()) == 1  # parou no primeiro pedaço
+        assert bridge.agent_supports(s, "read_range")
+
+
 def test_chunked_read_refused_for_an_old_agent(client, engine):
     _enroll(client, version=None)
     with Session(engine) as s, pytest.raises(bridge.AgentTooOldError, match="0.3.0"):

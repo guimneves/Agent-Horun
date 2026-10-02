@@ -194,19 +194,37 @@ def _run(session: Session, timeout: float | None, **fields) -> _TaskSnapshot:
 # ------------------------------------------------------------- operações
 
 
+def _too_large(path: str, size: int, limit: int) -> AgentTaskError:
+    return AgentTaskError(
+        f"{path}: arquivo de {size / 1024 / 1024:.1f} MB acima do limite de {limit / 1024 / 1024:.0f} MB",
+        code="too_large",
+    )
+
+
 def read_bytes(
-    session: Session, root: str, path: str, *, timeout: float | None = None, chunk_size: int | None = None
+    session: Session,
+    root: str,
+    path: str,
+    *,
+    timeout: float | None = None,
+    chunk_size: int | None = None,
+    max_bytes: int | None = None,
 ) -> bytes:
     """Lê um arquivo do equipamento. Com `chunk_size`, em pedaços (uma
     tarefa por pedaço — para arquivos que não cabem numa resposta só);
-    precisa de agente >= 0.3.0. `timeout` vale para cada pedaço."""
+    precisa de agente >= 0.3.0. `timeout` vale para cada pedaço.
+    `max_bytes`: arquivo maior é recusado (`code="too_large"`) — em pedaços,
+    já no primeiro, sem baixar o resto."""
     bind = session.get_bind()
     if chunk_size is None:
         _require_online(bind)
         snap = _run(session, timeout, op="read_file", root=root, path=path)
         if not snap.result_ok:
             raise _failed(snap, f"falha ao ler {path!r} via agente")
-        return base64.b64decode(snap.result_content_base64 or "")
+        data = base64.b64decode(snap.result_content_base64 or "")
+        if max_bytes is not None and len(data) > max_bytes:
+            raise _too_large(path, len(data), max_bytes)
+        return data
 
     _require_version(bind, "read_range")
     parts: list[bytes] = []
@@ -217,12 +235,20 @@ def read_bytes(
         )
         if not snap.result_ok:
             raise _failed(snap, f"falha ao ler {path!r} via agente")
+        total = snap.result_size
+        if max_bytes is not None and total is not None and total > max_bytes:
+            raise _too_large(path, total, max_bytes)
         piece = base64.b64decode(snap.result_content_base64 or "")
         parts.append(piece)
         offset += len(piece)
-        total = snap.result_size
         if not piece or total is None or offset >= total:
             return b"".join(parts)
+
+
+def agent_supports(session: Session, feature: str) -> bool:
+    """Algum agente conectado agora suporta `feature`? (ex. para ler em
+    pedaços só quando der, e senão o arquivo inteiro.)"""
+    return any(supports(d.agent_version, feature) for d in _online_devices(session.get_bind()))
 
 
 def read_text(session: Session, root: str, path: str, *, timeout: float | None = None) -> str:
