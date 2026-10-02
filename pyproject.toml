@@ -1,6 +1,6 @@
 [project]
 name = "horun-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Agente local instalado no PC de um equipamento do laboratório NQTR — dá ao Horun acesso aos arquivos locais sem abrir porta de entrada no equipamento."
 requires-python = ">=3.11"
 dependencies = [
@@ -9,6 +9,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Só para rodar os testes do pacote do servidor (server/) — no PC do
+# equipamento não é preciso. Mesmas versões travadas do Horun Core.
+server-dev = [
+    "pytest>=8.0",
+    "fastapi==0.141.1",
+    "sqlmodel==0.0.47",
+    "pydantic==2.13.4",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -16,3 +24,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "server/tests"]
+pythonpath = [".", "server"]

@@ -15,10 +15,12 @@ abrir nenhuma porta de entrada.
 
 ## A ideia em uma frase
 
-O agente só sabe fazer três coisas — **ler um arquivo**, **escrever um
-arquivo** (com segurança, por substituição atômica) e **listar arquivos**
-de uma pasta — dentro de uma lista de pastas explicitamente permitidas por
-instalação (`roots`, no `config.json`). Ele **nunca** interpreta o
+O agente só sabe fazer quatro coisas — **ler um arquivo** (inteiro ou em
+pedaços), **escrever um arquivo** (com segurança, por substituição
+atômica), **listar arquivos** e **mover/renomear um grupo de arquivos**
+(tudo ou nada) — dentro de uma lista de pastas explicitamente permitidas
+por instalação (`roots`, no `config.json`), cada uma com a sua permissão
+(`read`, `read-move` ou `read-write`). Ele **nunca** interpreta o
 conteúdo desses arquivos (isso é sempre trabalho do backend do módulo,
 ex. `RE7S-Horun/backend/app/modules/tabsample.py`) — é por isso que o
 mesmo agente serve pra qualquer equipamento: o que muda de instalação pra
@@ -45,18 +47,69 @@ nunca o código.
 
 Contrato completo (formato exato de cada chamada) em [`PROTOCOL.md`](PROTOCOL.md).
 
+## Configuração de cada instalação (`config.json`)
+
+Um arquivo por PC de equipamento, nunca commitado. Formato com a lista de
+módulos atendidos (`servers`) e a permissão de cada pasta — ver
+`config.example.json`:
+
+```json
+{
+  "device_name": "PC-ROCKEVAL-65",
+  "poll_interval_seconds": 3,
+  "servers": [
+    {
+      "url": "https://192.168.31.80/m/re7s",
+      "enroll_code": "",
+      "device_token": "",
+      "roots": {
+        "data":        { "path": "C:\\VT RE7S\\data\\system", "mode": "read-write" },
+        "jobs":        { "path": "C:\\Users\\RE7S 65\\Documents\\RE7raw-data", "mode": "read-move" },
+        "mtl_results": { "path": "D:\\Results", "mode": "read" }
+      }
+    }
+  ]
+}
+```
+
+- **Um PC atendendo dois módulos** (ex. o OneDrive do Financeiro
+  sincronizado no mesmo PC): um segundo bloco em `servers`, com a `url` do
+  outro módulo, o código de enrolamento gerado **naquele** módulo e as
+  pastas dele (ex. `"drive": {"path": "...", "mode": "read"}`).
+- Cada módulo enrola separadamente: gere o código no módulo, ponha em
+  `enroll_code` daquele bloco, reinicie o agente — ele troca pelo token,
+  salva no arquivo e apaga o código.
+- O formato antigo (`server_url` + `roots` com caminhos em texto) continua
+  valendo igual, com permissão total nas pastas.
+
+## Lado servidor (para quem mantém um módulo)
+
+O mesmo pacote para todo módulo, em `server/horun_agent_server/`: tabelas,
+rotas `/agent/*` e a ponte (`read_text`, `read_bytes` em pedaços,
+`write_text`, `list_files`, `move_files`). Vai para dentro de cada módulo por
+cópia versionada:
+
+```bash
+python scripts/vendor_server.py "<módulo>/backend"          # copia para app/agent_server/
+python scripts/vendor_server.py "<módulo>/backend" --check  # está em dia?
+```
+
+Não edite a cópia no módulo — mude aqui e rode o script de novo. O módulo
+monta as rotas com `build_router(...)` e garante as colunas de
+`models.MIGRATIONS` (ver docstrings do pacote).
+
 ## Rodando em desenvolvimento
 
 ```bash
 python -m venv .venv
-.venv/Scripts/pip install -e ".[dev]"
-copy config.example.json config.json   # preencher server_url e roots locais de teste
+.venv/Scripts/pip install -e ".[server-dev]"   # [dev] basta se não for mexer em server/
+copy config.example.json config.json            # preencher servidores e pastas locais de teste
 .venv/Scripts/python -m agent
 ```
 
-Sem um servidor de verdade rodando ainda, use os testes (`pytest`) pra
-validar as três operações (`ler`/`escrever`/`listar`) e a lista de pastas
-permitidas isoladamente — são a parte que não depende de rede nenhuma.
+`pytest` roda os testes do agente (`tests/`) e do pacote do servidor
+(`server/tests/`, de ponta a ponta: servidor e agente de verdade
+conversando, sem rede).
 
 ## Instalando como serviço do Windows (no PC do equipamento)
 
@@ -66,11 +119,7 @@ depender de terminal aberto nem de login do Windows.
 
 ## Status
 
-Esqueleto inicial: primitivas de arquivo + lista de permissões + loop de
-consulta ao servidor, com testes cobrindo o que não depende de rede.
-**Ainda não integrado a nenhum backend de módulo de verdade** — o próximo
-passo é implementar o lado servidor (`POST /agent/enroll`, `GET
-/agent/tasks`, `POST /agent/tasks/{id}/result`) no `RE7S-Horun` e trocar,
-um arquivo de cada vez, as leituras/escritas diretas em disco por
-chamadas que passam pelo agente quando o backend estiver rodando em modo
-Core (ver `Prompt_Fase2.md`, seção 6).
+Versão 0.3.0. Em produção no RE7S (PC do Rock-Eval): leitura/escrita do
+TABSAMPLE, filas, savecycle, standard.ini, .B00 do PostRun, pesagem e
+renomeação de análises. O lado servidor é o pacote `server/`, usado pelo
+RE7S e preparado para o Financeiro (drive).

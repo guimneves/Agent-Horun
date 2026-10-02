@@ -102,11 +102,50 @@ em vez de quebrar.
 - Origem e destino confinados ao mesmo root; pastas de destino são criadas.
 - O conteúdo dos arquivos nunca é lido nem alterado.
 
+## Versão do agente — cabeçalho `X-Horun-Agent-Version` (desde 0.3.0)
+
+Toda chamada do agente leva `X-Horun-Agent-Version: 0.3.0`. O servidor
+guarda isso na instalação (`GET /agent/devices` mostra) e só manda o que
+aquela versão entende. Agente que não manda o cabeçalho (0.1/0.2) é tratado
+como 0.2.0.
+
+## Leitura em pedaços (desde 0.3.0)
+
+Para arquivos grandes, `read_file` pode vir com `args`:
+
+```json
+{ "id": 9, "op": "read_file", "root": "drive", "path": "x.pdf",
+  "content_base64": null, "glob": null, "args": { "offset": 0, "length": 4194304 } }
+```
+
+O resultado traz o pedaço em `content_base64` e o tamanho TOTAL em `size`
+(o servidor pede o próximo pedaço até completar). `args` só é enviado a
+agentes >= 0.3.0 — para os antigos, o servidor recusa a operação antes de
+enfileirar, com a mensagem "atualize o agente".
+
 ## Compatibilidade
 
-Desde 0.2.0 o agente ignora campos desconhecidos numa tarefa (antes, um
-campo novo vindo do servidor derrubava o processo) e nenhuma falha na
-consulta de tarefas encerra o serviço.
+- Para agentes 0.1/0.2, cada tarefa tem **exatamente** os 6 campos
+  `id, op, root, path, content_base64, glob` (o 0.1 quebra com um campo a
+  mais ou a menos). Campos novos só vão para quem se identificou >= 0.3.0.
+- Desde 0.2.0 o agente ignora campos desconhecidos e nenhuma falha na
+  consulta encerra o serviço.
+- Código de enrolamento: 10 caracteres, uso único (consumido de forma
+  atômica), vale 60 minutos — expirado responde `410`.
+
+## Permissão por pasta (desde 0.3.0, no `config.json`)
+
+Cada `root` pode ter `mode`: `read` (ler/listar), `read-move` (+ mover/
+renomear, nunca alterar conteúdo) ou `read-write` (tudo — o padrão, e o que
+vale para pastas escritas só como texto). Tarefa fora da permissão volta
+`{"ok": false, "error": "sem permissão para ... em 'x' ..."}`.
+
+## Vários módulos no mesmo PC (desde 0.3.0)
+
+`config.json` com `servers` (uma lista): o agente atende cada um em
+sequência a cada rodada, cada um com o seu token e as suas pastas — um fora
+do ar não atrapalha os outros. O formato antigo (um `server_url` só)
+continua valendo. Exemplos em `config.example.json` e no README.
 
 ## Por que `base64` e não texto puro
 

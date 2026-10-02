@@ -1,12 +1,17 @@
 """Cliente HTTP do agente — só chama pra fora, nunca escuta nada (ver
 PROTOCOL.md). Uma classe fininha em cima do httpx, pra `runner.py` não
-precisar saber o formato exato de cada chamada."""
+precisar saber o formato exato de cada chamada. Um cliente por servidor
+(módulo) atendido."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
 
 import httpx
+
+from agent import __version__
+
+VERSION_HEADER = "X-Horun-Agent-Version"
 
 
 class ClientError(RuntimeError):
@@ -22,6 +27,9 @@ class Task:
     path: str | None = None
     content_base64: str | None = None  # write_file: conteúdo; move_files: JSON dos movimentos
     glob: str | None = None
+    # parâmetros extras da operação (servidor só manda para agente >= 0.3.0),
+    # ex. read_file: {"offset": 0, "length": 1048576}
+    args: dict | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "Task":
@@ -37,11 +45,18 @@ class HorunAgentClient:
         self.server_url = server_url.rstrip("/")
         self._timeout = timeout
 
+    def _headers(self, device_token: str | None = None) -> dict[str, str]:
+        headers = {VERSION_HEADER: __version__}
+        if device_token:
+            headers["Authorization"] = f"Bearer {device_token}"
+        return headers
+
     def enroll(self, enroll_code: str, device_name: str) -> str:
         try:
             r = httpx.post(
                 f"{self.server_url}/agent/enroll",
                 json={"enroll_code": enroll_code, "device_name": device_name},
+                headers=self._headers(),
                 timeout=self._timeout,
             )
         except httpx.HTTPError as exc:
@@ -55,11 +70,7 @@ class HorunAgentClient:
 
     def poll_tasks(self, device_token: str) -> list[Task]:
         try:
-            r = httpx.get(
-                f"{self.server_url}/agent/tasks",
-                headers={"Authorization": f"Bearer {device_token}"},
-                timeout=self._timeout,
-            )
+            r = httpx.get(f"{self.server_url}/agent/tasks", headers=self._headers(device_token), timeout=self._timeout)
         except httpx.HTTPError as exc:
             raise ClientError(f"falha ao consultar tarefas: {exc}") from exc
         if r.status_code != 200:
@@ -75,7 +86,7 @@ class HorunAgentClient:
         try:
             r = httpx.post(
                 f"{self.server_url}/agent/tasks/{task_id}/result",
-                headers={"Authorization": f"Bearer {device_token}"},
+                headers=self._headers(device_token),
                 json=result,
                 timeout=self._timeout,
             )

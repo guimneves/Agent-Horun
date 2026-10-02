@@ -7,24 +7,22 @@ import base64
 
 import pytest
 
-from agent.config import AgentConfig
+from agent.config import RootConfig, ServerConfig
 from agent.tasks import TaskError, list_files, read_file, write_file
 
 
 @pytest.fixture()
 def config(tmp_path):
+    # um servidor (módulo) com duas pastas de permissão total — o padrão de
+    # quem usa o formato antigo do config.json
     data_dir = tmp_path / "data"
     jobs_dir = tmp_path / "jobs"
     data_dir.mkdir()
     jobs_dir.mkdir()
-    return AgentConfig(
-        path=tmp_path / "config.json",
-        server_url="https://example.invalid",
-        device_name="teste",
-        enroll_code="",
+    return ServerConfig(
+        url="https://example.invalid/m/re7s",
+        roots={"data": RootConfig(data_dir.resolve()), "jobs": RootConfig(jobs_dir.resolve())},
         device_token="tok",
-        poll_interval_seconds=1,
-        roots={"data": data_dir, "jobs": jobs_dir},
     )
 
 
@@ -66,12 +64,12 @@ def test_write_invalid_base64_raises_task_error(config):
 
 def test_write_is_atomic_no_partial_file_left_on_success(config):
     write_file(config, "data", "TABSAMPLE.txt", base64.b64encode(b"conteudo final").decode())
-    leftovers = list((config.roots["data"]).glob(".horun_agent_*"))
+    leftovers = list((config.root("data")).glob(".horun_agent_*"))
     assert leftovers == []
 
 
 def test_list_files_filters_by_glob_and_is_relative_posix(config):
-    jobs = config.roots["jobs"]
+    jobs = config.root("jobs")
     (jobs / "IFP160000" / "BULK ROCK").mkdir(parents=True)
     (jobs / "IFP160000" / "BULK ROCK" / "a.B00").write_text("x")
     (jobs / "IFP160000" / "BULK ROCK" / "a.B00~").write_text("backup, deve ser ignorado pelo glob abaixo")

@@ -1,12 +1,16 @@
 {
-  "server_url": "https://192.168.31.80/m/re7s",
   "device_name": "PC-ROCKEVAL-65",
-  "enroll_code": "",
-  "device_token": "",
   "poll_interval_seconds": 3,
-  "roots": {
-    "data": "C:\\VT RE7S\\data\\system",
-    "jobs": "C:\\Users\\RE7S 65\\Documents\\RE7raw-data",
-    "mtl_results": "D:\\Results"
-  }
+  "servers": [
+    {
+      "url": "https://192.168.31.80/m/re7s",
+      "enroll_code": "",
+      "device_token": "",
+      "roots": {
+        "data": { "path": "C:\\VT RE7S\\data\\system", "mode": "read-write" },
+        "jobs": { "path": "C:\\Users\\RE7S 65\\Documents\\RE7raw-data", "mode": "read-move" },
+        "mtl_results": { "path": "D:\\Results", "mode": "read" }
+      }
+    }
+  ]
 }

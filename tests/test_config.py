@@ -28,9 +28,9 @@ def test_load_config_reads_roots_as_resolved_paths(tmp_path):
     (tmp_path / "data").mkdir()
     path = _write(tmp_path)
     config = load_config(path)
-    assert config.server_url == "https://example.invalid/m/re7s"
-    assert config.root("data") == (tmp_path / "data").resolve()
-    assert config.enrolled is False
+    assert config.servers[0].url == "https://example.invalid/m/re7s"
+    assert config.servers[0].root("data") == (tmp_path / "data").resolve()
+    assert config.servers[0].enrolled is False
 
 
 def test_load_config_missing_file_raises(tmp_path):
@@ -54,9 +54,9 @@ def test_save_persists_device_token(tmp_path):
     (tmp_path / "data").mkdir()
     path = _write(tmp_path)
     config = load_config(path)
-    config.device_token = "novo-token"
+    config.servers[0].device_token = "novo-token"
     config.save()
 
     reloaded = load_config(path)
-    assert reloaded.device_token == "novo-token"
-    assert reloaded.enrolled is True
+    assert reloaded.servers[0].device_token == "novo-token"
+    assert reloaded.servers[0].enrolled is True
