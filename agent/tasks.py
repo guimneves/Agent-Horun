@@ -227,9 +227,20 @@ def list_files(server: ServerConfig, root_name: str, glob: str) -> ListFilesResu
         raise TaskError(f"root {root_name!r} não é uma pasta existente: {root}", code="not_found")
     if glob.startswith(("/", "\\")) or ".." in glob.replace("\\", "/").split("/") or ":" in glob:
         raise TaskError(f"padrão de busca inválido: {glob!r}", code="outside_root")
-    matcher = _glob_regex(glob.replace("\\", "/"))
+    pattern = glob.replace("\\", "/")
+    matcher = _glob_regex(pattern)
+    # começa a varredura na parte fixa do padrão ("Job/**/*.B00" -> só a
+    # pasta Job), em vez de percorrer o root inteiro
+    fixed = []
+    for part in pattern.split("/")[:-1]:
+        if any(c in part for c in "*?["):
+            break
+        fixed.append(part)
+    start = os.path.join(root, *fixed) if fixed else root
+    if not os.path.isdir(_os_path(start)):
+        return ListFilesResult(paths=[])
     found: list[str] = []
-    for folder, _dirs, files in _walk(root):
+    for folder, _dirs, files in _walk(start):
         for name in files:
             rel = _relative(root, os.path.join(folder, name))
             if matcher.match(rel):

@@ -129,3 +129,15 @@ def test_makedirs_creates_every_missing_level(tmp_path):
     _makedirs(target)
     assert os.path.isdir(_os_path(target))
     _makedirs(target)  # já existe: nada a fazer
+
+
+def test_list_files_walks_only_the_fixed_part_of_the_pattern(server, monkeypatch):
+    import agent.tasks as tasks
+
+    walked = []
+    real_walk = tasks._walk
+    monkeypatch.setattr(tasks, "_walk", lambda start: (walked.append(start), real_walk(start))[1])
+    assert list_files(server, "drive", "2026/**/*.pdf").paths == ["2026/Notas/nf1.pdf"]
+    assert walked and walked[0].endswith("2026")
+    assert list_files(server, "drive", "NaoExiste/**/*.pdf").paths == []
+    assert list_files(server, "drive", "**/*.txt").paths == ["leia.txt"]

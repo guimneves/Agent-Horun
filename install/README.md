@@ -1,4 +1,49 @@
-# Instalando o agente como serviço do Windows
+# Instalando o agente no PC do equipamento
+
+Duas formas — escolha uma, **nunca as duas** (dois agentes ao mesmo tempo
+pegam as mesmas tarefas e podem gravar o mesmo arquivo duas vezes):
+
+- **A. Janela aberta na inicialização** — sem programa extra; serve quando o
+  PC fica sempre logado (é o caso do PC do Rock-Eval). Ver abaixo.
+- **B. Serviço do Windows com o NSSM** — roda sem ninguém logado e volta
+  sozinho se cair. Seções 0 a 3.
+
+## A. Janela aberta na inicialização (sem NSSM)
+
+Rode no PowerShell (não precisa ser administrador) — cria um atalho na pasta
+"Inicializar" do Windows, que abre o agente a cada login:
+
+```powershell
+$bat = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Horun Agent.bat"
+Set-Content -Path $bat -Encoding ascii -Value @'
+@echo off
+title Horun Agent - NAO FECHE ESTA JANELA
+cd /d C:\Horun\Agent-Horun
+.venv\Scripts\python.exe -m agent
+pause
+'@
+```
+
+O `pause` segura a janela se o agente cair, para dar para ler o erro. Para
+reiniciar: feche a janela "Horun Agent" e dê dois cliques nesse `.bat` — não
+abra outro `python -m agent` pelo terminal.
+
+Cuidados (todos já causaram parada sem ninguém perceber):
+
+1. **Desligue o "Modo de Edição Rápida"** da janela: botão direito na barra
+   de título → Propriedades → desmarcar. Com ele ligado, um clique dentro da
+   janela **congela o agente** (o título passa a começar com "Selecionar")
+   até alguém apertar Enter/Esc.
+2. **O PC não pode suspender**: Configurações → Sistema → Energia →
+   Suspender = Nunca (desligar só a tela não tem problema).
+3. **Conferir se está vivo**: as últimas linhas do log devem ter horário
+   recente — `Get-Content C:\Horun\Agent-Horun\agent.log -Tail 5` — ou, no
+   Horun, o "visto por último" da instalação do agente.
+
+Atualizar: feche a janela, `git pull` + `.venv\Scripts\pip install -e .` na
+pasta do agente, e abra o `.bat` de novo.
+
+## B. Serviço do Windows com o NSSM
 
 Usamos o [NSSM](https://nssm.cc/) — transforma qualquer programa comum num
 serviço do Windows: **inicia sozinho no boot, reinicia se cair e roda sem
@@ -7,10 +52,10 @@ equipamento reiniciar (atualização do Windows, queda de luz) para tudo que
 depende dele parar — gravar no Rock-Eval, ler `.B00`, pesagem, renomear
 análise.
 
-Os passos abaixo são para o PC do Rock-Eval, mas valem para qualquer
-equipamento. Rode o PowerShell **como administrador**.
+Vale para qualquer equipamento (no PC do Rock-Eval, que fica sempre logado,
+optou-se pela forma A). Rode o PowerShell **como administrador**.
 
-## 0. Antes de começar
+### 0. Antes de começar
 
 - **Feche o agente que está rodando no terminal** (Ctrl+C na janela dele) e
   confirme que não há outro `python -m agent` aberto (Gerenciador de
@@ -18,7 +63,7 @@ equipamento. Rode o PowerShell **como administrador**.
   tarefas** e podem gravar o mesmo arquivo duas vezes.
 - Atualize o agente para a versão mais nova (≥ 0.2.0):
   ```powershell
-  cd C:\Horun\Horun-Agent        # a pasta onde o agente está clonado
+  cd C:\Horun\Agent-Horun        # a pasta onde o agente está clonado
   git pull
   .venv\Scripts\pip install -e .
   ```
@@ -27,17 +72,17 @@ equipamento. Rode o PowerShell **como administrador**.
   IP, mantendo o resto do endereço como está). No RE7S o endereço é a porta
   estreita do agente: `http://192.168.31.80:8001` (nunca `/m/re7s/`).
 
-## 1. Baixar o NSSM
+### 1. Baixar o NSSM
 
 1. https://nssm.cc/download → `nssm-2.24.zip`.
 2. Copie `win64\nssm.exe` para `C:\Windows\System32` (ou anote o caminho
    completo e use-o no lugar de `nssm` abaixo).
 3. Teste: `nssm version`.
 
-## 2. Instalar o serviço
+### 2. Instalar o serviço
 
 ```powershell
-$A = "C:\Horun\Horun-Agent"      # ajuste se a pasta for outra
+$A = "C:\Horun\Agent-Horun"      # ajuste se a pasta for outra
 nssm install HorunAgent "$A\.venv\Scripts\python.exe" "-m agent"
 nssm set HorunAgent AppDirectory "$A"
 nssm set HorunAgent DisplayName "Horun Agent"
@@ -54,7 +99,7 @@ nssm set HorunAgent AppRotateFiles 1
 nssm set HorunAgent AppRotateBytes 1048576
 ```
 
-### Com qual usuário o serviço roda
+#### Com qual usuário o serviço roda
 
 Por padrão o serviço roda como **Sistema Local**, que lê e grava nas pastas
 locais (ex. `C:\Users\RE7S 65\Documents\RE7raw-data`) sem problema. Só troque
@@ -68,7 +113,7 @@ nssm set HorunAgent ObjectName ".\NomeDoUsuario" "SenhaDoUsuario"
 (use a conta do Windows que já abre o RockSeven/GeoWorks nesse PC — a senha
 você digita aí, ela fica guardada pelo Windows no serviço.)
 
-## 3. Ligar e conferir
+### 3. Ligar e conferir
 
 ```powershell
 nssm start HorunAgent
@@ -83,17 +128,17 @@ logar.
 
 Também dá para ver/parar pelo `services.msc` → "Horun Agent".
 
-## Atualizar (nova versão do agente)
+### Atualizar (nova versão do agente)
 
 ```powershell
 nssm stop HorunAgent
-cd C:\Horun\Horun-Agent
+cd C:\Horun\Agent-Horun
 git pull
 .venv\Scripts\pip install -e .
 nssm start HorunAgent
 ```
 
-## Problemas comuns
+### Problemas comuns
 
 | Sintoma | O que olhar |
 |---|---|
@@ -101,7 +146,7 @@ nssm start HorunAgent
 | Rodando, mas o Horun diz que o agente não respondeu | `agent.log`: falha de rede/`server_url` errado (IP antigo?); `consulta de tarefas recusada (401)` = token revogado, gere um novo código de enrolamento |
 | Não acha a pasta dos dados | o `roots` do `config.json` aponta para uma unidade de rede → ver "Com qual usuário o serviço roda" |
 
-## Desinstalar
+### Desinstalar
 
 ```powershell
 nssm stop HorunAgent
