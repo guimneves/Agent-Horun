@@ -132,6 +132,14 @@ def test_device_version_is_recorded(client):
     assert devices[0]["agent_version"] == AGENT_VERSION
 
 
+def test_device_dates_carry_the_utc_offset(client):
+    # sem o fuso, o navegador mostra a hora UTC como local (3h adiantada)
+    _enroll(client)
+    device = client.get("/agent/devices").json()[0]
+    for field in ("enrolled_at", "last_seen_at"):
+        assert device[field].endswith(("Z", "+00:00")), device[field]
+
+
 # ---------------------------------------------------------------- compatibilidade
 
 

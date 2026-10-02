@@ -194,10 +194,12 @@ def build_router(
         """Quais instalações já enrolaram, quando cada uma foi vista pela
         última vez e qual versão do agente está rodando."""
         devices = session.exec(select(AgentDevice).order_by(AgentDevice.enrolled_at.desc())).all()
+        # as_utc: o SQLite devolve as datas sem fuso, e o navegador leria a
+        # hora UTC como local (3h adiantada em Brasília)
         return [
             DeviceOut(
-                id=d.id, device_name=d.device_name, enrolled_at=d.enrolled_at, last_seen_at=d.last_seen_at,
-                revoked_at=d.revoked_at, agent_version=d.agent_version,
+                id=d.id, device_name=d.device_name, enrolled_at=as_utc(d.enrolled_at),
+                last_seen_at=as_utc(d.last_seen_at), revoked_at=as_utc(d.revoked_at), agent_version=d.agent_version,
             )
             for d in devices
         ]
