@@ -6,12 +6,14 @@ olhando)."""
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import time
 
 from agent.client import ClientError, HorunAgentClient, Task
 from agent.config import AgentConfig
-from agent.tasks import TaskError, list_files, read_file, write_file
+from agent.tasks import TaskError, list_files, move_files, read_file, write_file
 
 logger = logging.getLogger("horun_agent")
 
@@ -44,6 +46,17 @@ def execute_task(config: AgentConfig, task: Task) -> dict:
         if task.op == "list_files":
             result = list_files(config, task.root, task.glob or "*")
             return {"ok": True, "paths": result.paths}
+        if task.op == "move_files":
+            # os movimentos vêm em JSON dentro de content_base64 (campo que já
+            # existe no protocolo) — assim um agente antigo, que não conhece
+            # esta operação, só responde "operação desconhecida" em vez de
+            # quebrar com um campo novo
+            try:
+                payload = json.loads(base64.b64decode(task.content_base64 or "", validate=True))
+            except (ValueError, TypeError) as exc:
+                raise TaskError(f"movimentos inválidos: {exc}") from exc
+            result = move_files(config, task.root, payload.get("moves", []) if isinstance(payload, dict) else payload)
+            return {"ok": True, "paths": result.paths}
         return {"ok": False, "error": f"operação desconhecida: {task.op!r}"}
     except TaskError as exc:
         return {"ok": False, "error": str(exc)}
@@ -63,7 +76,7 @@ def run_forever(config: AgentConfig) -> None:
     while True:
         try:
             tasks = client.poll_tasks(config.device_token)
-        except ClientError as exc:
+        except Exception as exc:  # noqa: BLE001 — nada na consulta pode derrubar o serviço
             logger.warning("consulta ao servidor falhou, tentando de novo em breve: %s", exc)
             time.sleep(config.poll_interval_seconds)
             continue

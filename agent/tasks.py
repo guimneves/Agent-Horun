@@ -1,5 +1,5 @@
-"""As três operações que o agente sabe fazer — ler, escrever (atômico) e
-listar arquivos — sempre confinadas a um `root` permitido pela
+"""As operações que o agente sabe fazer — ler, escrever (atômico), listar e
+mover/renomear (em grupo, tudo ou nada) arquivos — sempre confinadas a um `root` permitido pela
 configuração local (ver PROTOCOL.md). Nenhuma lógica de negócio aqui:
 quem entende o conteúdo dos arquivos é sempre o backend do módulo, do
 lado do servidor.
@@ -90,3 +90,71 @@ def list_files(config: AgentConfig, root_name: str, glob: str) -> ListFilesResul
 
     matches = sorted(p for p in root.glob(glob) if p.is_file())
     return ListFilesResult(paths=[m.relative_to(root).as_posix() for m in matches])
+
+
+@dataclass
+class MoveFilesResult:
+    paths: list[str]  # destinos efetivamente movidos, relativos ao root (posix)
+
+
+def move_files(config: AgentConfig, root_name: str, moves: list[dict]) -> MoveFilesResult:
+    """Move/renomeia um GRUPO de arquivos dentro do mesmo root, tudo ou nada.
+
+    Usado para renomear uma análise do Rock-Eval: o `.B00` e o `.B00~` (cópia
+    anterior guardada pelo GeoWorks) andam sempre juntos. Cada item é
+    `{"from": "...", "to": "...", "optional": bool}` — `optional` = pode não
+    existir (ex. análise sem `.B00~`), e aí é simplesmente pulado.
+
+    Garantias:
+    - nunca sobrescreve: se qualquer destino já existir, nada é movido;
+    - tudo ou nada: se um movimento falhar no meio (ex. arquivo aberto no
+      GeoWorks), os anteriores são desfeitos;
+    - origem e destino confinados ao root (mesma checagem de `_resolve_safe`);
+    - o conteúdo dos arquivos nunca é lido nem alterado — só o nome/pasta.
+    """
+    if not isinstance(moves, list) or not moves:
+        raise TaskError("nenhum arquivo para mover")
+
+    planned: list[tuple[Path, Path, str]] = []
+    seen_targets: set[Path] = set()
+    for item in moves:
+        if not isinstance(item, dict) or not item.get("from") or not item.get("to"):
+            raise TaskError(f"movimento inválido: {item!r}")
+        src = _resolve_safe(config, root_name, item["from"])
+        dst = _resolve_safe(config, root_name, item["to"])
+        if src == dst:
+            raise TaskError(f"origem e destino iguais: {item['from']!r}")
+        if not src.is_file():
+            if item.get("optional"):
+                continue
+            raise TaskError(f"arquivo não encontrado: {item['from']!r}")
+        if dst.exists() or dst in seen_targets:
+            raise TaskError(f"já existe um arquivo com esse nome: {item['to']!r}")
+        seen_targets.add(dst)
+        planned.append((src, dst, item["to"]))
+
+    if not planned:
+        raise TaskError("nenhum dos arquivos de origem existe")
+
+    done: list[tuple[Path, Path]] = []
+    try:
+        for src, dst, _ in planned:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if dst.exists():  # conferido de novo logo antes — nunca sobrescrever
+                raise TaskError(f"já existe um arquivo com esse nome: {dst.name!r}")
+            os.rename(src, dst)
+            done.append((src, dst))
+    except BaseException as exc:
+        for src, dst in reversed(done):
+            try:
+                os.rename(dst, src)
+            except OSError:
+                pass  # melhor esforço; o erro original é o que importa reportar
+        if isinstance(exc, TaskError):
+            raise
+        if isinstance(exc, OSError):
+            raise TaskError(f"não foi possível mover (arquivo aberto em outro programa?): {exc}") from exc
+        raise
+
+    root = config.root(root_name)
+    return MoveFilesResult(paths=[dst.relative_to(root).as_posix() for _, dst, _ in planned])

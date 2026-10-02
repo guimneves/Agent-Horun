@@ -4,7 +4,7 @@ precisar saber o formato exato de cada chamada."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import httpx
 
@@ -17,11 +17,19 @@ class ClientError(RuntimeError):
 @dataclass
 class Task:
     id: str
-    op: str  # "read_file" | "write_file" | "list_files"
+    op: str  # "read_file" | "write_file" | "list_files" | "move_files"
     root: str
-    path: str | None
-    content_base64: str | None
-    glob: str | None
+    path: str | None = None
+    content_base64: str | None = None  # write_file: conteúdo; move_files: JSON dos movimentos
+    glob: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Ignora campos que esta versão não conhece. Antes era `Task(**t)`:
+        um campo novo vindo do servidor dava TypeError e derrubava o
+        processo do agente inteiro."""
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
 
 class HorunAgentClient:
@@ -56,7 +64,12 @@ class HorunAgentClient:
             raise ClientError(f"falha ao consultar tarefas: {exc}") from exc
         if r.status_code != 200:
             raise ClientError(f"consulta de tarefas recusada ({r.status_code}): {r.text}")
-        return [Task(**t) for t in r.json().get("tasks", [])]
+        try:
+            return [Task.from_dict(t) for t in r.json().get("tasks", [])]
+        except (ValueError, TypeError, AttributeError) as exc:
+            # JSON inválido ou tarefa sem os campos mínimos: trata como falha
+            # de comunicação (tenta de novo depois), nunca como queda do agente
+            raise ClientError(f"resposta de tarefas inválida: {exc}") from exc
 
     def report_result(self, device_token: str, task_id: str, result: dict) -> None:
         try:

@@ -38,10 +38,10 @@ enrolar de novo, a menos que o admin revogue a instalação.
   "tasks": [
     {
       "id": "task-123",
-      "op": "read_file",           // "read_file" | "write_file" | "list_files"
+      "op": "read_file",           // "read_file" | "write_file" | "list_files" | "move_files"
       "root": "data",              // chave dentro de `roots` no config.json do agente
       "path": "TABSAMPLE.txt",     // caminho relativo ao root, sempre posix (/, nunca \)
-      "content_base64": null,      // só em write_file — conteúdo a gravar
+      "content_base64": null,      // write_file: conteúdo a gravar; move_files: JSON dos movimentos
       "glob": null                 // só em list_files — ex. "**/*.B00"
     }
   ]
@@ -65,6 +65,11 @@ consultas — não é erro, só quer dizer "nada pendente agora".
 { "ok": true, "paths": ["BULK ROCK/2026-07-17_IFP160000_1.B00", "..."] }
 ```
 
+**Request (sucesso, movimento)** — `paths` = destinos efetivamente movidos
+```json
+{ "ok": true, "paths": ["J2/BULK ROCK/2026-07-17_IFP160000_X_1.B00", "J2/BULK ROCK/2026-07-17_IFP160000_X_1.B00~"] }
+```
+
 **Request (sucesso, escrita)**
 ```json
 { "ok": true }
@@ -74,6 +79,34 @@ consultas — não é erro, só quer dizer "nada pendente agora".
 ```json
 { "ok": false, "error": "arquivo não encontrado: TABSAMPLE.txt" }
 ```
+
+## `move_files` — renomear/mover um grupo de arquivos (desde 0.2.0)
+
+Usado pelo RE7S para renomear uma análise já feita (nome e/ou job): o
+`.B00` e o `.B00~` (cópia anterior do GeoWorks) andam juntos. Os movimentos
+vão em JSON, codificado em base64, no campo `content_base64` — **não** num
+campo novo, de propósito: um agente antigo que não conhece a operação só
+responde `{"ok": false, "error": "operação desconhecida: 'move_files'"}`
+em vez de quebrar.
+
+```json
+{ "moves": [
+    { "from": "J1/BULK ROCK/a_1.B00",  "to": "J2/BULK ROCK/a_X_1.B00" },
+    { "from": "J1/BULK ROCK/a_1.B00~", "to": "J2/BULK ROCK/a_X_1.B00~", "optional": true }
+] }
+```
+
+- `optional: true` = a origem pode não existir (é pulada).
+- **Nunca sobrescreve**: se qualquer destino existir, nada é movido.
+- **Tudo ou nada**: falha no meio (ex. arquivo aberto) desfaz os anteriores.
+- Origem e destino confinados ao mesmo root; pastas de destino são criadas.
+- O conteúdo dos arquivos nunca é lido nem alterado.
+
+## Compatibilidade
+
+Desde 0.2.0 o agente ignora campos desconhecidos numa tarefa (antes, um
+campo novo vindo do servidor derrubava o processo) e nenhuma falha na
+consulta de tarefas encerra o serviço.
 
 ## Por que `base64` e não texto puro
 

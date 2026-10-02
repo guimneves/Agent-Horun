@@ -1,6 +1,6 @@
 [project]
 name = "horun-agent"
-version = "0.1.0"
+version = "0.2.0"
 description = "Agente local instalado no PC de um equipamento do laboratório NQTR — dá ao Horun acesso aos arquivos locais sem abrir porta de entrada no equipamento."
 requires-python = ">=3.11"
 dependencies = [
