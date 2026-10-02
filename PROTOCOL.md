@@ -2,9 +2,31 @@
 
 Três chamadas HTTP, todas iniciadas pelo agente (nunca o servidor abre
 conexão com o equipamento). O servidor aqui é o backend de um módulo do
-Horun (ex. `RE7S-Horun`), não o Horun Core — o Core só faz o proxy de
-`/m/re7s/*`, o contrato abaixo é implementado dentro do próprio módulo,
-em rotas do tipo `/agent/*`.
+Horun (ex. `RE7S-Horun`), não o Horun Core — o contrato abaixo é
+implementado dentro do próprio módulo, em rotas do tipo `/agent/*`
+(pacote `server/horun_agent_server`).
+
+## Como o agente chega ao módulo — a porta estreita
+
+**Não** pelo gateway do Core (`https://<servidor>/m/<módulo>/...`): ele
+exige a sessão de um usuário logado, e o agente não tem uma. Também não
+expondo o backend do módulo: em modo Core o backend confia no cabeçalho
+`X-Horun-User-Id`, e quem alcançasse a porta dele poderia se passar por
+qualquer usuário.
+
+Cada módulo com agente expõe **uma porta própria, que só repassa as 3
+rotas do agente** — `/agent/enroll`, `/agent/tasks`,
+`/agent/tasks/{id}/result` (autenticadas pelo token do dispositivo) — e
+responde 404 para todo o resto (inclusive `/agent/enroll-codes` e
+`/agent/devices`, que são de admin e passam pelo Core). Modelo pronto: o
+segundo `server { listen 8001; }` em `frontend/nginx.conf` do RE7S, com
+`client_max_body_size 50m` (`.B00` grande em base64 dava 413) e a porta
+publicada no `docker-compose.yml` (+ regra no Firewall do Windows do
+servidor). O `url` do agente é essa porta: RE7S = `http://192.168.31.80:8001`.
+Portas: RE7S 8001; Financeiro 8002 (proposta); próximos módulos, 8003...
+
+Conferência depois do deploy, de outra máquina:
+`curl http://<servidor>:<porta>/agent/enroll-codes` tem que dar **404**.
 
 ## 1. Enrolamento — `POST {server_url}/agent/enroll`
 

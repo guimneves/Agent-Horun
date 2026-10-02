@@ -59,7 +59,7 @@ módulos atendidos (`servers`) e a permissão de cada pasta — ver
   "poll_interval_seconds": 3,
   "servers": [
     {
-      "url": "https://192.168.31.80/m/re7s",
+      "url": "http://192.168.31.80:8001",
       "enroll_code": "",
       "device_token": "",
       "roots": {
@@ -72,6 +72,11 @@ módulos atendidos (`servers`) e a permissão de cada pasta — ver
 }
 ```
 
+- **`url` é a porta estreita do agente no módulo, nunca `/m/<módulo>/`**:
+  o gateway do Core (`/m/...`) exige login de usuário, e o agente não tem
+  um. Cada módulo expõe uma porta própria que só repassa as 3 rotas do
+  agente (RE7S: `http://192.168.31.80:8001`, `frontend/nginx.conf`, segundo
+  `server{}`) — ver PROTOCOL.md, "Como o agente chega ao módulo".
 - **Um PC atendendo dois módulos** (ex. o OneDrive do Financeiro
   sincronizado no mesmo PC): um segundo bloco em `servers`, com a `url` do
   outro módulo, o código de enrolamento gerado **naquele** módulo e as

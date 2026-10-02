@@ -24,7 +24,8 @@ equipamento. Rode o PowerShell **como administrador**.
   ```
 - Confira o `config.json`: `server_url` tem que apontar para o IP **fixo**
   do servidor (`192.168.31.80` — se ainda estiver `.171`/`.117`, troque só o
-  IP, mantendo o resto do endereço como está).
+  IP, mantendo o resto do endereço como está). No RE7S o endereço é a porta
+  estreita do agente: `http://192.168.31.80:8001` (nunca `/m/re7s/`).
 
 ## 1. Baixar o NSSM
 
